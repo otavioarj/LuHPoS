@@ -1,4 +1,7 @@
 #!/usr/bin/perl -w
+# This file is part of LuHPoS project. This software may be used and distributed
+# according to the terms of the GNU General Public License version 2, incorporated herein by reference, at repository: https://github.com/otavioarj/LuHPoS
+# =] 
 
 use strict;
 use HTTP::Daemon;
@@ -10,8 +13,8 @@ $SIG{PIPE} = "IGNORE";
 
 my $num_of_threads = 4;
 
-my $UA_MAX=$ARGV[0]  ||  3;
-my $Timeout=$ARGV[1] || 10;
+my $UA_MAX=$ARGV[0]  ||  12;
+my $Timeout=$ARGV[1] || 6;
 $| = 1;
 
 
@@ -42,7 +45,7 @@ sub proxy_test
 
 sub file_fetcher
 {
- open FILE, $_[0] or die $!;
+ open FILE, $_[0] or die "[-] Can't load  $_[0] . Error: $!\n";
  my @read_ua=<FILE>;
  chomp(@read_ua);
  my $size=@read_ua;
