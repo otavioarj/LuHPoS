@@ -9,17 +9,19 @@ use HTTP::Daemon;
 use LWP::UserAgent;
 use threads;
 use threads::shared;
+use Getopt::Std;
+$| = 1;
 
-use POSIX ":sys_wait_h";
-$SIG{CHLD}= "IGNORE";
 $SIG{PIPE} = "IGNORE";
 
-
-my $port = 8080;
-my $UA_MAX:shared =$ARGV[0]  ||  10;
-my $MAX_Threads = $ARGV[1] || $UA_MAX;
-my $Timeout=$ARGV[2] || 15;
-$| = 1;
+my %options=();
+getopts("p:m:t:o:h", \%options);
+my (@ua,@proxy);
+my $port = $options{p} || 8080;
+my $UA_MAX = $options{m}  ||  10;
+my $P_MAX:shared = $options{m}  ||  10;
+my $MAX_Threads = $options{t} || $P_MAX*2;
+my $Timeout=$options{o} || 10;
 
 
 sub proxy_test
@@ -42,16 +44,15 @@ sub file_fetcher
  chomp(@read_ua);
  
  my (@ua,$i):shared;
- my ($p_test,$pk,@threads,@param,$size);
-
+ my ($p_test,$pk,@threads,@param);
  srand(time());
  
  $i = 0;
- @param=@_;
-  #@threads= initThreads(); 
- for (0..$MAX_Threads) {push @threads, async 
+ if($_[1])
+ {
+ for (0..$MAX_Threads) {push (@threads, threads->create(sub  
   {
-    while($i<$UA_MAX)
+    while($i<$P_MAX)
      {
 	if(@read_ua!=0)
 	 {
@@ -59,113 +60,119 @@ sub file_fetcher
 	  $pk=int(rand(@read_ua));	  	  
           $p_test=$read_ua[$pk];	  
 	  $read_ua[$pk]=$read_ua[0];
-	  shift(@read_ua);
-	  $size=@read_ua;	  	  	
+	  shift(@read_ua);	  	  	  	
          }
 	else 
          {
-           print "[-] Only [". int($i+1) ."] good proxies found! Continuing anyway ...                \r";
-	   lock($UA_MAX);
-           $UA_MAX=$i+1;		
+           print "[-] Only [". $i ."] good proxies found! Continuing anyway ...                \r";
+	   lock($P_MAX);
+           $P_MAX=$i;		
 	   last;
          }
-        if($param[1] )
+        $p_test=~ s/^\s+//;
+        $p_test=~ s/\s+$//;
+        if( $p_test!~ /http/ && $p_test!~ /socks/)
          {
-           $p_test=~ s/^\s+//;
-           $p_test=~ s/\s+$//;
-           if( $p_test!~ /http/ && $p_test!~ /socks/)
-            {
-              $p_test= "http://" . $p_test; 
-            }    
-           if(!&proxy_test($p_test))
-            {   
-              print "[". $i ."/$UA_MAX] Good Proxies . [-] $p_test rejected!             \r";
-              $p_test=0;
-              redo;
-            }
-           print "[". int($i+1) ."/$UA_MAX] Good Proxies\r"; 
-          }
-	 lock(@ua);push(@ua,$p_test); 
-	 lock($i); $i++;     
-   }
-  };   
+           $p_test= "http://" . $p_test; 
+         }    
+        if(!&proxy_test($p_test))
+         {   
+           print "[". $i ."/$P_MAX] Good Proxies . [-] $p_test rejected!             \r";
+	   lock($i);
+           if($i<$P_MAX) {redo;}
+	   else {last;}
+         }
+	lock($i);
+        if($i>=$P_MAX) {last;}	         
+        lock(@ua);push(@ua,$p_test); 
+	$i++;   
+	print "[". int($i) ."/$P_MAX] Good Proxies\r";  
+      }
+   }));   
  }
- $_->join for @threads;
- #foreach(@threads){$_->join();}     	
+ foreach(@threads) {$_->join();}
+ }
+ else
+  { 
+    while($i!=$UA_MAX)
+     {
+      $pk=int(rand(@read_ua));	  	  
+      $p_test=$read_ua[$pk];	  
+      $read_ua[$pk]=$read_ua[0];
+      shift(@read_ua);	
+      push(@ua,$p_test); 
+      $i++ 
+     }
+   }
  close(FILE);
  return @ua;
 }
 
-sub dproxy {
-my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
-my $d = HTTP::Daemon->new( 
+sub dproxy 
+ {
+   my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
+   my $d = HTTP::Daemon->new( 
 	LocalHost => "localhost", 				   
 	LocalPort => $port
-) || die "[-] Can't bind on port $port! Erro: $!\n";
-print "[*] Local proxy URL: ", $d->url ," \n";
-my ($ex_proxy, $size,$response,@ua_l,@proxy_l,@pid, $s_in,$s_out);
-@ua_l=@{$_[0]};
-@proxy_l=@{$_[1]};
-$s_in=0;$s_out=0;
-
-while (my $c = $d->accept) 
-{
-	
-	$ex_proxy=$proxy_l[int(rand($UA_MAX))];
-	
-        push(@pid, fork());
-	$size=@pid;        
-        if(!$size) {die "fork() failed: $!";}
-#	$ex_proxy	
-        if ($pid[$size -1]==0) 
-	{
-	     while (my $request = $c->get_request)
-		{  
-			$ua->proxy(['http', 'https','socks'], $ex_proxy);
-			$ua->timeout($Timeout); 
-			#print $c->sockhost . ": " . $request->uri->as_string . "\n"; User_Agen0t
-			$request->remove_header("User-Agent");
-			$request->push_header( User_Agent   => $ua_l[int(rand($UA_MAX))]);
-			#$request->push_header( Via => "HTTP/1.1 GWA" );
-			
-			$response = $ua->simple_request( $request );
-			while ($response->code == 408 || $response->code == 504 || $response->code == 500)
-			 {
-			   print "[!] Proxy $ex_proxy timeout!\r";
-   			   $ua->proxy(['http', 'https','socks'], $proxy_l[int(rand($UA_MAX))]);			   
-			   $ua->timeout($Timeout+5);
-			   $response = $ua->simple_request( $request );
-			 }
-		#	$response->remove_header(qw( Set-Cookie Set-Cookie2 ));
-			$s_out+=length($request->as_string("\n")); $s_in+=length($response->as_string("\r"));
-			print "[*] In: $s_in bytes . Out: $s_out bytes.           \r";
-			$c->send_response( $response );
-		}
-		exit(0);
-	}
-	srand(time()+$pid[$size -1]);
-        while(!@pid){
-	waitpid (pop(@pid), WNOHANG);}
-		
+     ) || die "[-] Can't bind on port $port! Erro: $!\n";
+   print "[*] Local proxy URL: ", $d->url ," \n";
+   my ($ex_proxy, $size,$response,@ua_l,@proxy_l,@pid );
+   my ($s_in,$s_out):shared;
+   @ua_l=@{$_[0]};
+   @proxy_l=@{$_[1]};
+   $s_in=0;$s_out=0;
+   srand(time()); 
+   while (my $c = $d->accept) 
+   { 
+     threads->create(sub
+      {	
+	$ex_proxy=$proxy_l[int(rand($P_MAX))];
+	while (my $request = $c->get_request)
+	 {  
+	   $ua->proxy(['http', 'https','socks'], $ex_proxy);
+	   $ua->timeout($Timeout); 
+	   $request->remove_header("User-Agent");
+	   $request->push_header( User_Agent   => $ua_l[int(rand($UA_MAX))]);
+	   $request->push_header( Via => "HTTP/1.1 GWA" );
+	   $response = $ua->simple_request( $request );
+	   while ($response->code == 408 || $response->code == 504 || $response->code == 500)
+	    {
+	      print "[!] Proxy $ex_proxy timeout!            \r";
+   	      $ua->proxy(['http', 'https','socks'], $proxy_l[int(rand($P_MAX))]);			   
+	      $ua->timeout($Timeout+5);
+	      $response = $ua->simple_request( $request );
+	    }
+	   #$response->remove_header(qw( Set-Cookie Set-Cookie2 ));
+	   #lock($s_out); lock($s_in);
+	   #$s_out+=length($request->as_string("\n")); $s_in+=length($response->as_string("\r"));
+	   #print "[*] In: $s_in bytes . Out: $s_out bytes.           \r";
+	   $c->send_response( $response );
+	 }
 	$c->close;
-	undef($c);
-        
-	
-}
-$d->shutdown(2);
-}
+	threads->exit(0); 
+       })->detach;         
+   }
+ $d->shutdown(2);
+ }
 
 ## Main :3
 
-my (@ua,@proxy);
+
 
 print "\n" .
 '    __                  ___        __    
    / /  _   _   /\  /\ / _ \ ___  / _\   
   / /  | | | | / /_/ // /_)// _ \ \ \    
  / /___| |_| |/ __  // ___/| (_) |_\ \   
- \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 1.2' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
+ \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 1.8' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
 print "[*] LuHPoS - Luck's Http Proxy Obfuscator Soup\n";
+
+if(defined $options{h})
+{
+ print "-p(ort)    : Port number to bind.[default 8080]\n-m(ax)     : Max number of entries for User Agent and Proxies.[default 10]\n-t(hreads) : Max number of threads to run at proxy testing. [default 2*m(ax)]\n-o(timeout): Timeout for proxies, in seconds. [default 10]\n";
+ exit(0);
+}
+else {print "[*] Using default options, try -h for help\n";}
 @ua=&file_fetcher("ua.txt");
 print "[+] User Agents loaded\n";
 print "[*] Testing proxy list...\n";
