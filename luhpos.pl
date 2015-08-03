@@ -4,36 +4,28 @@
 # =] 
 
 use strict;
+use warnings;
 use HTTP::Daemon;
 use LWP::UserAgent;
 use threads;
+use threads::shared;
+
 use POSIX ":sys_wait_h";
 $SIG{CHLD}= "IGNORE";
 $SIG{PIPE} = "IGNORE";
 
-my $num_of_threads = 4;
 
-my $UA_MAX=$ARGV[0]  ||  12;
-my $Timeout=$ARGV[1] || 6;
+my $port = 8080;
+my $UA_MAX:shared =$ARGV[0]  ||  10;
+my $MAX_Threads = $ARGV[1] || $UA_MAX;
+my $Timeout=$ARGV[2] || 15;
 $| = 1;
-
-
-sub initThreads
-{
-  my @initThreads;
-  for(my $i = 1;$i<=$num_of_threads;$i++)
-   {
-     push(@initThreads,$i);
-    }
-  return @initThreads;
-
-}
 
 
 sub proxy_test
 {
  my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
- $ua->timeout(2 + int($Timeout/2));
+ $ua->timeout($Timeout);
  $ua->agent("Mozilla/5.0 (Linux) Gecko Iceweasel (Debian) Mnenhy");
  $ua->proxy(['http', 'https','socks'], $_[0]);
  my $response = $ua->get("http://duckduckgo.com");
@@ -46,22 +38,38 @@ sub proxy_test
 sub file_fetcher
 {
  open FILE, $_[0] or die "[-] Can't load  $_[0] . Error: $!\n";
- my @read_ua=<FILE>;
+ my @read_ua:shared =<FILE>;
  chomp(@read_ua);
- my $size=@read_ua;
- my (@ua,$i,$p_test,$pk);
+ 
+ my (@ua,$i):shared;
+ my ($p_test,$pk,@threads,@param,$size);
+
  srand(time());
- $i=0;$p_test=0;
- #my @threads = initThreads(); http://www.dreamincode.net/forums/topic/255487-multithreading-in-perl/ 
- while($i<$UA_MAX)
- {
-	while(!$p_test)
+ 
+ $i = 0;
+ @param=@_;
+  #@threads= initThreads(); 
+ for (0..$MAX_Threads) {push @threads, async 
+  {
+    while($i<$UA_MAX)
+     {
+	if(@read_ua!=0)
 	 {
-	  $pk=int(rand($size));
-          $p_test=splice(@read_ua,$pk,1);
-	  $size--;	
+	  lock(@read_ua);
+	  $pk=int(rand(@read_ua));	  	  
+          $p_test=$read_ua[$pk];	  
+	  $read_ua[$pk]=$read_ua[0];
+	  shift(@read_ua);
+	  $size=@read_ua;	  	  	
          }
-        if($_[1] )
+	else 
+         {
+           print "[-] Only [". int($i+1) ."] good proxies found! Continuing anyway ...                \r";
+	   lock($UA_MAX);
+           $UA_MAX=$i+1;		
+	   last;
+         }
+        if($param[1] )
          {
            $p_test=~ s/^\s+//;
            $p_test=~ s/\s+$//;
@@ -77,9 +85,13 @@ sub file_fetcher
             }
            print "[". int($i+1) ."/$UA_MAX] Good Proxies\r"; 
           }
-         push(@ua,$p_test); $i++;        
-}
-        	
+	 lock(@ua);push(@ua,$p_test); 
+	 lock($i); $i++;     
+   }
+  };   
+ }
+ $_->join for @threads;
+ #foreach(@threads){$_->join();}     	
  close(FILE);
  return @ua;
 }
@@ -88,8 +100,8 @@ sub dproxy {
 my $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
 my $d = HTTP::Daemon->new( 
 	LocalHost => "localhost", 				   
-	LocalPort => 8080
-) || die;
+	LocalPort => $port
+) || die "[-] Can't bind on port $port! Erro: $!\n";
 print "[*] Local proxy URL: ", $d->url ," \n";
 my ($ex_proxy, $size,$response,@ua_l,@proxy_l,@pid, $s_in,$s_out);
 @ua_l=@{$_[0]};
@@ -119,7 +131,7 @@ while (my $c = $d->accept)
 			$response = $ua->simple_request( $request );
 			while ($response->code == 408 || $response->code == 504 || $response->code == 500)
 			 {
-			   print "[!] Proxy $ex_proxy timeout!\n";
+			   print "[!] Proxy $ex_proxy timeout!\r";
    			   $ua->proxy(['http', 'https','socks'], $proxy_l[int(rand($UA_MAX))]);			   
 			   $ua->timeout($Timeout+5);
 			   $response = $ua->simple_request( $request );
@@ -152,7 +164,7 @@ print "\n" .
    / /  _   _   /\  /\ / _ \ ___  / _\   
   / /  | | | | / /_/ // /_)// _ \ \ \    
  / /___| |_| |/ __  // ___/| (_) |_\ \   
- \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 1.0' . "\n Updates at: www.github.com/otavioarj/luhpos\n\n";                                        
+ \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 1.2' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
 print "[*] LuHPoS - Luck's Http Proxy Obfuscator Soup\n";
 @ua=&file_fetcher("ua.txt");
 print "[+] User Agents loaded\n";
