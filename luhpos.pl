@@ -42,7 +42,7 @@ sub proxy_test
    sleep($delay) if defined $options{d};
      
  }
-   if($a>2)
+   if($a>1)
      { return 1; }
     else { return 0; } 
 }
@@ -126,24 +126,24 @@ sub dproxy
 	LocalPort => $port
      ) || die "[-] Can't bind on port $port! Erro: $!\n";
    print "[*] Local proxy URL: ", $d->url ," \n";
-   my ($ex_proxy, $size,$response,@ua_l,@pid, $rnd );
-   my ($s_in,$s_out,@proxy_l,$temp):shared;
-   @ua_l=@{$_[0]};
+   my ( $size,$response,@ua_l,@pid, $rnd );
+   my ($s_in,$s_out,@proxy_l,$temp,@t_out):shared;
+   @ua_l=@{$_[0]};  
    @proxy_l=@{$_[1]};
+   @t_out=($Timeout)x scalar(@proxy_l);
    $s_in=0;$s_out=0;
    srand(time()); 
    while (my $c = $d->accept) 
    { 
      threads->create(sub
       {	
- 	print "[!] No proxy! All proxies timedout!!!\n" if(@proxy_l<1);
+ 	print "[!] No proxy! All proxies timedout!!!\r" if(@proxy_l<1);
 	
 	$rnd=int(rand($P_MAX));
-	$ex_proxy=$proxy_l[$rnd];
-	while (my $request = $c->get_request)
+		while (my $request = $c->get_request)
 	 {  
-	   $ua->proxy(['http', 'https','socks'], $ex_proxy);
-	   $ua->timeout($Timeout); 
+	   $ua->proxy(['http', 'https','socks'], $proxy_l[$rnd]);
+	   $ua->timeout($t_out[$rnd]); 
 	   $request->remove_header("User-Agent");
 	   $request->push_header( User_Agent   => $ua_l[int(rand($UA_MAX))]);
 	   $request->push_header( Via => "HTTP/1.1 GWA" ) if not defined $options{a};
@@ -151,18 +151,24 @@ sub dproxy
 	   $response = $ua->simple_request( $request );
 	   while ($response->code == 408 || $response->code == 504 || $response->code == 500)
 	    {
-	      print "[!] Proxy $ex_proxy timeout!            \n";
-              { 
+	      print "[!] Proxy $proxy_l[$rnd] timeout!            \n";
+	      if($t_out[$rnd]> 2*$Timeout)
+               { 
 	         lock(@proxy_l);
+		 lock(@t_out);
                  $temp=$proxy_l[0];
 		 $proxy_l[0]=$proxy_l[$rnd];
 		 $proxy_l[$rnd]=$temp;
-		 shift(@proxy_l);
-              }
+		 $temp=$t_out[0];
+ 		 $t_out[0]=$t_out[$rnd];
+		 $t_out[$rnd]=$temp;
+		 shift(@t_out);
+		 shift(@proxy_l);		 
+               }
+ 	      else { $t_out[$rnd]+=5;}
 	      $rnd=int(rand($P_MAX));
-	      $ex_proxy=$proxy_l[$rnd];
-   	      $ua->proxy(['http', 'https','socks'],$ex_proxy );
-	      $ua->timeout($Timeout+5);
+	      $ua->proxy(['http', 'https','socks'], $proxy_l[$rnd]);
+	      $ua->timeout( $t_out[$rnd]);
 	      $response = $ua->simple_request( $request );
 	    }
 	   $response->remove_header(qw( Set-Cookie Set-Cookie2 )) if defined $options{a};
