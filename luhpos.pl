@@ -20,7 +20,7 @@ my (@ua,@proxy);
 my $port = $options{p} || 8080;
 my $UA_MAX = $options{m}  ||  10;
 my $P_MAX:shared = $options{m}  ||  10;
-my $MAX_Threads = $options{t} || $P_MAX*2;
+my $MAX_Threads = $options{t} || $P_MAX*3;
 my $Timeout=$options{o} || 10;
 my $target=$options{x} || "http://duckduckgo.com";
 my $delay=$options{d} || 0;
@@ -126,33 +126,38 @@ sub dproxy
 	LocalPort => $port
      ) || die "[-] Can't bind on port $port! Erro: $!\n";
    print "[*] Local proxy URL: ", $d->url ," \n";
-   my ( $size,$response,@ua_l,@pid, $rnd );
+   my ( $size,$response,@ua_l,@pid, $rnd,$ex_p,$ex_t);
    my ($s_in,$s_out,@proxy_l,$temp,@t_out):shared;
    @ua_l=@{$_[0]};  
    @proxy_l=@{$_[1]};
-   @t_out=($Timeout)x scalar(@proxy_l);
-   $s_in=0;$s_out=0;
+   @t_out=($Timeout)x scalar(@proxy_l); 
+   $s_in=0;$s_out=0;$rnd=0;
    srand(time()); 
    while (my $c = $d->accept) 
    { 
      threads->create(sub
       {	
  	print "[!] No proxy! All proxies timedout!!!\r" if(@proxy_l<1);
-	
-	$rnd=int(rand($P_MAX));
-		while (my $request = $c->get_request)
+	{
+         lock(@proxy_l);
+	 lock(@t_out);
+	 $rnd=int(rand($P_MAX));
+	 $ex_t=$t_out[$rnd];
+	 $ex_p=$proxy_l[$rnd];
+        }
+	while (my $request = $c->get_request)
 	 {  
-	   $ua->proxy(['http', 'https','socks'], $proxy_l[$rnd]);
-	   $ua->timeout($t_out[$rnd]); 
+	   $ua->proxy(['http', 'https','socks'], $ex_p);
+	   $ua->timeout($ex_t); 
 	   $request->remove_header("User-Agent");
 	   $request->push_header( User_Agent   => $ua_l[int(rand($UA_MAX))]);
 	   $request->push_header( Via => "HTTP/1.1 GWA" ) if not defined $options{a};
 	   $request->remove_header(qw( From Referer Cookie Cookie2 )) if defined $options{a};
 	   $response = $ua->simple_request( $request );
-	   while ($response->code == 408 || $response->code == 504 || $response->code == 500)
+	   while ($response->code == 408 || $response->code == 504 || $response->code == 500 && @proxy_l>1)
 	    {
-	      print "[!] Proxy $proxy_l[$rnd] timeout!            \n";
-	      if($t_out[$rnd]> 2*$Timeout)
+	      print "[!] Proxy $ex_p timeout!            \n";
+	      if($ex_t > 2*$Timeout)
                { 
 	         lock(@proxy_l);
 		 lock(@t_out);
@@ -163,12 +168,19 @@ sub dproxy
  		 $t_out[0]=$t_out[$rnd];
 		 $t_out[$rnd]=$temp;
 		 shift(@t_out);
-		 shift(@proxy_l);		 
+		 shift(@proxy_l);
+		 $P_MAX--;
                }
- 	      else { $t_out[$rnd]+=5;}
-	      $rnd=int(rand($P_MAX));
-	      $ua->proxy(['http', 'https','socks'], $proxy_l[$rnd]);
-	      $ua->timeout( $t_out[$rnd]);
+ 	      else {lock(@t_out); $t_out[$rnd]+=5;}
+	      {
+		lock(@proxy_l);
+		lock(@t_out);
+	        $rnd=int(rand($P_MAX));
+	        $ex_p=$proxy_l[$rnd];
+	        $ex_t=$t_out[$rnd];
+	      }
+	      $ua->proxy(['http', 'https','socks'], $ex_p);
+	      $ua->timeout( $ex_t);
 	      $response = $ua->simple_request( $request );
 	    }
 	   $response->remove_header(qw( Set-Cookie Set-Cookie2 )) if defined $options{a};
@@ -194,12 +206,12 @@ print "\n" .
    / /  _   _   /\  /\ / _ \ ___  / _\   
   / /  | | | | / /_/ // /_)// _ \ \ \    
  / /___| |_| |/ __  // ___/| (_) |_\ \   
- \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 2.' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
+ \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 2.0' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
 print "[*] LuHPoS - Luck's Http Proxy Obfuscator Soup\n";
 
 if(defined $options{h})
 {
- print "-p(ort)    : Port number to bind.[default 8080]\n-m(ax)     : Max number of entries for User Agent and Proxies.[default 10]\n-t(hreads) : Max number of threads to run at proxy testing. [default 2*m(ax)]\n-o(timeout): Timeout for proxies, in seconds. [default 10]\n-a(non)    : Anonymiser both request and response(removes Cookies, Refer, From, Via..).[default not anon]\n-d(elay)   : Delay between each connection to proxies\n-x(target  : Target site to connect trougth proxies\n";
+ print "-p(ort)    : Port number to bind.[default 8080]\n-m(ax)     : Max number of entries for User Agent and Proxies.[default 10]\n-t(hreads) : Max number of threads to run at proxy testing. [default 3*m(ax)]\n-o(timeout): Timeout for proxies, in seconds. [default 10]\n-a(non)    : Anonymiser both request and response(removes Cookies, Refer, From, Via..).[default not anon]\n-d(elay)   : Delay between each connection to proxies\n-x(target  : Target site to connect trougth proxies\n";
  exit(0);
 }
 if(not %options ) {print "[*] Using default options, try -h for help\n";}
@@ -207,5 +219,6 @@ if(not %options ) {print "[*] Using default options, try -h for help\n";}
 print "[+] User Agents loaded\n";
 print "[*] Testing proxy list...\n";
 @proxy=&file_fetcher("proxies.txt",1);
+die "[-] No good proxy found!\n" if(scalar(@proxy)<1);
 print "\n[+] Working Proxy loaded!\n";
 &dproxy(\@ua,\@proxy);
