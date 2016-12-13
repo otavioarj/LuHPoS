@@ -249,7 +249,7 @@ print "\n" .
    / /  _   _   /\  /\ / _ \ ___  / _\   
   / /  | | | | / /_/ // /_)// _ \ \ \    
  / /___| |_| |/ __  // ___/| (_) |_\ \   
- \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 3.0' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
+ \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 3.0-alpha' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
 print "[*] LuHPoS - Luck's Http Proxy Obfuscator Soup\n";
 
 if(defined $options{h})
