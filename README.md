@@ -7,7 +7,7 @@
  \____/ \__,_|\/ /_/ \/     \___/ \__/ 
 
  
-LuHPoS - Luck's Http Proxy Obfuscator Soup v3.0-alpha
+LuHPoS - Luck's Http Proxy Obfuscator Soup v3.0-alpha (aka coruja-poliglota)
 
 One local proxy to multi-chaining-proxies, with local Sock5 proxy-server and remote-client proxies 
 supporting:
@@ -23,7 +23,7 @@ supporting:
    / /  _   _   /\  /\ / _ \ ___  / _\   
   / /  | | | | / /_/ // /_)// _ \ \ \    
  / /___| |_| |/ __  // ___/| (_) |_\ \   
- \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 3.0-alpha
+ \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 3.0-alpha (aka coruja-poliglota)
     At: www.github.com/otavioarj/luhpos
 
 [*] LuHPoS - Luck's Http Proxy Obfuscator Soup
