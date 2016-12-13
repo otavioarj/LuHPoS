@@ -9,7 +9,8 @@
  
 LuHPoS - Luck's Http Proxy Obfuscator Soup v3.0-alpha
 
-One local proxy to multi-chaining-proxies, with local Sock5 proxy-server and remote-client proxies supporting:
+One local proxy to multi-chaining-proxies, with local Sock5 proxy-server and remote-client proxies 
+supporting:
   => HTTP through HTTPS 
   => HTTP/S through Sock4/5 proxies
   => HTTPS->connect with HTTPS clients/proxies
@@ -30,7 +31,7 @@ One local proxy to multi-chaining-proxies, with local Sock5 proxy-server and rem
 -m(ax)     : Max number of entries for User Agent and Proxies.[default 10]
 -t(hreads) : Max number of threads to run at proxy testing. [default 3*m(ax)]
 -o(timeout): Timeout for proxies, in seconds. [default 10]
--a(non)    : Anonymiser both HTTP request and response(removes Cookies, Refer, From, Via..).[default not anon]
+-a(non)    : Anonymiser both HTTP request and response(removes Cookies, Refer, From, Via..)[default not anon]
 -d(elay)   : Delay between each connection to proxies
 -x(target) : Target site to test connection trougth proxies
 -l(list)   : File with proxy list[default proxies.txt]
