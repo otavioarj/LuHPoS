@@ -249,7 +249,7 @@ print "\n" .
    / /  _   _   /\  /\ / _ \ ___  / _\   
   / /  | | | | / /_/ // /_)// _ \ \ \    
  / /___| |_| |/ __  // ___/| (_) |_\ \   
- \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 3.0-alpha' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
+ \____/ \__,_|\/ /_/ \/     \___/ \__/ v.s 3.0-alpha (aka coruja-poliglota)' . "\n    At: www.github.com/otavioarj/luhpos\n\n";                                        
 print "[*] LuHPoS - Luck's Http Proxy Obfuscator Soup\n";
 
 if(defined $options{h})
@@ -268,7 +268,7 @@ print "\n[+] Working Proxy loaded!\n";
 my $server = IO::Socket::Socks->new(SocksVersion => 5,
                                      ProxyAddr => 'localhost',
                                      ProxyPort =>  $port,
-                                     SocksDebug => 1,
+                                     SocksDebug => 0, #1 for debug :)
                                      Listen => 10) or die "[-] Can't bind on port $port! Error: $SOCKS_ERROR\n";  
 print "[*] Proxy on port: ", $port ," \n";
 
